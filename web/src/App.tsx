@@ -41,42 +41,47 @@ export function App() {
 
   // Once Pyodide is ready, re-load any community modules the user has
   // previously saved to IndexedDB so their drivers are back in the
-  // registry. Failures are swallowed (with a console warning) — the
-  // user can re-load manually from the Module Loader.
+  // registry, then populate the driver list. This is the *only* place
+  // we call `runtime.listDrivers()` on startup — `WelcomeView` just
+  // reads from the store — so we never race against another fetch
+  // wiping out freshly-loaded community drivers.
   useEffect(() => {
     if (status !== "ready") return;
     let cancelled = false;
     (async () => {
       const modules = await listModules();
-      if (modules.length === 0) return;
-      setAutoLoadStatus(`${modules.length} kayıtlı modül yükleniyor…`);
       let loaded = 0;
-      for (const m of modules) {
-        if (cancelled) return;
-        try {
-          const data = await loadModuleBytes(m.sha256);
-          if (data) {
-            await runtime.loadModule(m.filename, data);
-            loaded++;
+      if (modules.length > 0) {
+        setAutoLoadStatus(`${modules.length} kayıtlı modül yükleniyor…`);
+        for (const m of modules) {
+          if (cancelled) return;
+          try {
+            const data = await loadModuleBytes(m.sha256);
+            if (data) {
+              await runtime.loadModule(m.filename, data);
+              loaded++;
+            }
+          } catch (e) {
+            console.warn(
+              `[chirp-web] auto-reload failed for ${m.filename}:`,
+              e,
+            );
           }
-        } catch (e) {
-          console.warn(
-            `[chirp-web] auto-reload failed for ${m.filename}:`,
-            e,
-          );
         }
+        if (cancelled) return;
+        setAutoLoadStatus(`${loaded} modül yüklendi`);
       }
-      if (cancelled) return;
-      setAutoLoadStatus(`${loaded} modül yüklendi`);
-      // Refresh driver list with the newly-registered drivers.
+      // Populate the driver list AFTER modules are in, regardless of
+      // whether any reload happened. WelcomeView depends on this.
       try {
         const fresh = await runtime.listDrivers();
-        useAppStore.getState().setDrivers(fresh);
-      } catch {
-        /* ignore */
+        if (!cancelled) useAppStore.getState().setDrivers(fresh);
+      } catch (e) {
+        console.warn("[chirp-web] listDrivers failed:", e);
       }
-      // Clear the toast after a few seconds.
-      setTimeout(() => !cancelled && setAutoLoadStatus(null), 3000);
+      if (loaded > 0) {
+        setTimeout(() => !cancelled && setAutoLoadStatus(null), 3000);
+      }
     })();
     return () => {
       cancelled = true;

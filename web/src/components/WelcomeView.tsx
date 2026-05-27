@@ -9,7 +9,6 @@ import { ModuleLoader } from "./ModuleLoader";
 
 export function WelcomeView() {
   const drivers = useAppStore((s) => s.drivers);
-  const setDrivers = useAppStore((s) => s.setDrivers);
   const setOpenRadio = useAppStore((s) => s.setOpenRadio);
   const setError = useAppStore((s) => s.setError);
   const [recents, setRecents] = useState<StoredImage[]>([]);
@@ -17,14 +16,14 @@ export function WelcomeView() {
   const [showModuleLoader, setShowModuleLoader] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initial driver list + recents load once runtime is ready.
+  // Only recents — the driver list is owned by App.tsx (which loads
+  // community modules first, then calls listDrivers, then writes the
+  // result into the store). Re-fetching it here would race against
+  // that and could wipe out freshly-loaded community drivers.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const list = await runtime.listDrivers();
-        if (cancelled) return;
-        setDrivers(list);
         const recent = await listRecentImages();
         if (cancelled) return;
         setRecents(recent);
@@ -35,7 +34,7 @@ export function WelcomeView() {
     return () => {
       cancelled = true;
     };
-  }, [setDrivers, setError]);
+  }, [setError]);
 
   async function handleFileOpen(file: File) {
     try {
