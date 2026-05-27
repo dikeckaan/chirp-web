@@ -101,12 +101,14 @@ function withCoi(response) {
     return response;
   }
   const headers = new Headers(response.headers);
-  if (!headers.has("Cross-Origin-Embedder-Policy")) {
-    headers.set("Cross-Origin-Embedder-Policy", "require-corp");
-  }
-  if (!headers.has("Cross-Origin-Opener-Policy")) {
-    headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  }
+  // Always overwrite — `set()` replaces existing entries. CORP is
+  // required for cross-origin sub-resources to load under COEP.
+  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  // Diagnostic marker so we can confirm in DevTools that the SW
+  // actually intercepted this response.
+  headers.set("X-Chirp-Coi", "sw");
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
