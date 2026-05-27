@@ -15,16 +15,50 @@
       sees the headers; we do it from the inline script below.
     -->
     <script>
+      // COI bootstrap. The host might not send COOP/COEP headers
+      // (GitHub Pages doesn't); we install a service worker that
+      // rewrites response headers and reload once so the new headers
+      // take effect.
       (function () {
         if (!("serviceWorker" in navigator)) return;
-        if (window.crossOriginIsolated) return; // already good — nothing to do
+        if (!window.isSecureContext) return; // HTTPS required for SAB
+        if (window.crossOriginIsolated) return; // already good
+
+        // Guard against a reload loop: if we just bounced and the page
+        // is *still* not isolated, give up gracefully. The app will
+        // show a clear error when SAB is needed.
+        var loopKey = "chirp.coiReloadAttempted";
+        if (window.sessionStorage.getItem(loopKey) === "1") {
+          // Clear so a fresh future visit can try again.
+          window.sessionStorage.removeItem(loopKey);
+          console.warn("COI reload attempt didn't isolate the page");
+          return;
+        }
+
         navigator.serviceWorker.register("sw.js", { scope: "./" }).then(
           function (reg) {
-            // If we just installed and there's no controller, reload to
-            // bring the page under the SW's scope (and pick up COOP/COEP).
-            if (!navigator.serviceWorker.controller) {
-              window.sessionStorage.setItem("chirp.coiReload", "1");
+            // Wait for the SW to become active, then reload if it's
+            // not yet controlling this page.
+            function maybeReload() {
+              if (
+                navigator.serviceWorker.controller ||
+                !reg.active
+              ) {
+                if (reg.active && !window.crossOriginIsolated) {
+                  // Active but page isn't isolated → reload.
+                  window.sessionStorage.setItem(loopKey, "1");
+                  window.location.reload();
+                }
+                return;
+              }
+              // No controller yet — trigger reload to acquire one.
+              window.sessionStorage.setItem(loopKey, "1");
               window.location.reload();
+            }
+            if (reg.installing) {
+              reg.installing.addEventListener("statechange", maybeReload);
+            } else {
+              maybeReload();
             }
           },
           function (err) {

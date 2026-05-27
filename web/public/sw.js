@@ -9,8 +9,15 @@
 //
 // Cache name bumps invalidate everything on the next visit.
 
-const CACHE = "chirp-web-v2";
-const PRECACHE_PATTERNS = ["/pyodide/", "/chirp-bundle/"];
+const CACHE = "chirp-web-v3";
+
+// Compute paths relative to the SW location so we work both at root
+// (Cloudflare Pages) and under `/chirp-web/` (GitHub Pages).
+const SW_BASE = new URL("./", self.location.href).pathname; // e.g. "/chirp-web/"
+const PRECACHE_PATTERNS = [
+  SW_BASE + "pyodide/",
+  SW_BASE + "chirp-bundle/",
+];
 
 self.addEventListener("install", () => {
   self.skipWaiting();
