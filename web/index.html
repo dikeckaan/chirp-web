@@ -35,7 +35,14 @@
           return;
         }
 
-        navigator.serviceWorker.register("sw.js", { scope: "./" }).then(
+        navigator.serviceWorker
+          .register("sw.js", {
+            scope: "./",
+            // Bypass the HTTP cache when re-checking sw.js itself, so
+            // header-rewriting fixes ship the moment we redeploy.
+            updateViaCache: "none",
+          })
+          .then(
           function (reg) {
             // Wait for the SW to become active, then reload if it's
             // not yet controlling this page.
@@ -55,8 +62,16 @@
               window.sessionStorage.setItem(loopKey, "1");
               window.location.reload();
             }
+            // Force a remote check for a newer sw.js so stale workers
+            // (e.g. v2) get replaced on visit, not 24 h later.
+            reg.update().catch(function () {});
             if (reg.installing) {
               reg.installing.addEventListener("statechange", maybeReload);
+            } else if (reg.waiting) {
+              // A newer SW is staged but blocked behind the old one —
+              // skipWaiting() in the SW will trigger activate; once that
+              // happens we want a reload to acquire the new controller.
+              reg.waiting.addEventListener("statechange", maybeReload);
             } else {
               maybeReload();
             }
