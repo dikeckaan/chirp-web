@@ -49,7 +49,12 @@ export function App() {
     if (status !== "ready") return;
     let cancelled = false;
     (async () => {
+      console.log("[chirp-web] startup: auto-reload begin");
       const modules = await listModules();
+      console.log(
+        "[chirp-web] startup: %d stored module(s) in IndexedDB",
+        modules.length,
+      );
       let loaded = 0;
       if (modules.length > 0) {
         setAutoLoadStatus(`${modules.length} kayıtlı modül yükleniyor…`);
@@ -57,13 +62,23 @@ export function App() {
           if (cancelled) return;
           try {
             const data = await loadModuleBytes(m.sha256);
-            if (data) {
-              await runtime.loadModule(m.filename, data);
-              loaded++;
+            if (!data) {
+              console.warn(
+                "[chirp-web] startup: module %s missing bytes",
+                m.filename,
+              );
+              continue;
             }
+            const result = await runtime.loadModule(m.filename, data);
+            console.log(
+              "[chirp-web] startup: re-loaded %s → %d driver(s)",
+              m.filename,
+              result.newDrivers.length,
+            );
+            loaded++;
           } catch (e) {
-            console.warn(
-              `[chirp-web] auto-reload failed for ${m.filename}:`,
+            console.error(
+              `[chirp-web] startup: re-load failed for ${m.filename}:`,
               e,
             );
           }
@@ -75,9 +90,16 @@ export function App() {
       // whether any reload happened. WelcomeView depends on this.
       try {
         const fresh = await runtime.listDrivers();
-        if (!cancelled) useAppStore.getState().setDrivers(fresh);
+        console.log(
+          "[chirp-web] startup: listDrivers → %d entries",
+          fresh.length,
+        );
+        if (!cancelled) {
+          useAppStore.getState().setDrivers(fresh);
+          console.log("[chirp-web] startup: setDrivers committed");
+        }
       } catch (e) {
-        console.warn("[chirp-web] listDrivers failed:", e);
+        console.error("[chirp-web] startup: listDrivers failed:", e);
       }
       if (loaded > 0) {
         setTimeout(() => !cancelled && setAutoLoadStatus(null), 3000);

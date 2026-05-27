@@ -104,24 +104,33 @@ _IMPORT_RE = re.compile(
 
 
 def expand_driver_deps(paths: set[Path]) -> set[Path]:
-    """Pull in additional `chirp.drivers.*` modules referenced by the
-    initial allowlist (single-hop transitive closure)."""
+    """Walk the full transitive closure of `chirp.drivers.*` imports.
+
+    A single-hop closure misses drivers like `yaesu_clone` that other
+    drivers depend on but the allowlist doesn't mention directly. We
+    keep iterating until no new files are pulled in.
+    """
     drivers_dir = VENDOR_CHIRP / "drivers"
-    extra: set[Path] = set()
-    for p in paths:
-        try:
-            src = p.read_text(errors="ignore")
-        except OSError:
-            continue
-        for m in _IMPORT_RE.finditer(src):
-            ref = m.group(1) or m.group(2)
-            if not ref or not ref.startswith("chirp.drivers."):
+    seen = set(paths)
+    frontier = set(paths)
+    while frontier:
+        new_frontier: set[Path] = set()
+        for p in frontier:
+            try:
+                src = p.read_text(errors="ignore")
+            except OSError:
                 continue
-            modname = ref.split(".", 2)[2]
-            candidate = drivers_dir / f"{modname}.py"
-            if candidate.exists() and candidate not in paths:
-                extra.add(candidate)
-    return paths | extra
+            for m in _IMPORT_RE.finditer(src):
+                ref = m.group(1) or m.group(2)
+                if not ref or not ref.startswith("chirp.drivers."):
+                    continue
+                modname = ref.split(".", 2)[2]
+                candidate = drivers_dir / f"{modname}.py"
+                if candidate.exists() and candidate not in seen:
+                    seen.add(candidate)
+                    new_frontier.add(candidate)
+        frontier = new_frontier
+    return seen
 
 
 def chirp_files(allowlist: list[str]) -> list[tuple[Path, str]]:
