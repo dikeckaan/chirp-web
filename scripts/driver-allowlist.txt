@@ -1,0 +1,60 @@
+# MVP driver allowlist — bundled into chirp_pkg.tar.
+# Lines starting with # are comments. Module names are relative to
+# `chirp/drivers/` (e.g. `uv5r` → `chirp/drivers/uv5r.py`).
+#
+# Add a driver here and re-run scripts/build-bundle.py to ship it.
+# Community modules uploaded at runtime (e.g. f4hwn UV-K5) do NOT need
+# to appear here.
+
+fake
+generic_csv
+baofeng_common
+uv5r
+baofeng_uv17Pro
+
+# --- Baofeng + clones -------------------------------------------------
+uv6r
+uv82
+uv5x3
+bf_t1
+bf_t8
+bfb0
+gt5r
+h777
+
+# --- Quansheng ---------------------------------------------------------
+# Note: UV-K5 official driver isn't great — most users load f4hwn at
+# runtime via the Module Loader.
+
+# --- Wouxun ------------------------------------------------------------
+kguv8d
+kguv8e
+
+# --- Yaesu (HT) --------------------------------------------------------
+ft4
+ft60
+ft70
+ft2d
+vx5
+vx6
+vx7
+
+# --- Icom (HT) --------------------------------------------------------
+ic2730
+
+# --- Kenwood ----------------------------------------------------------
+thd72
+thd74
+
+# --- Anytone ----------------------------------------------------------
+anytone778uv
+
+# --- Radtel / TYT / common cheap HT ----------------------------------
+radtel_rt490
+th9000
+tdh8
+
+# --- support modules that drivers import (auto-detected) ----------
+# These are inferred from the imports of the allowlisted drivers; the
+# build script transitively walks `chirp.drivers.*` references and
+# pulls them in.

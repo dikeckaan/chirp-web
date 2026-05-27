@@ -1,0 +1,25 @@
+CHIRP-Web
+=========
+
+This project is a browser-native frontend for CHIRP, a free open-source
+radio programming tool created by Dan Smith (KK7DS) and the CHIRP
+community.
+
+Upstream project: https://github.com/kk7ds/chirp
+Project website:  https://chirpmyradio.com/
+
+The contents of vendor/chirp/ are imported as a git submodule from the
+upstream CHIRP repository and are governed by the GNU General Public
+License version 3 (or later). See vendor/chirp/COPYING for the full
+license text.
+
+The CHIRP-Web wrapper code (everything outside vendor/) is also licensed
+under GPL-3.0-or-later to remain compatible with the upstream project.
+
+Acknowledgements
+----------------
+
+- Dan Smith (KK7DS) and all CHIRP contributors
+- Pyodide project (https://pyodide.org/) for the Python-in-WASM runtime
+- Quansheng UV-K5 community driver authors (e.g. f4hwn) for advancing
+  open radio firmware tooling

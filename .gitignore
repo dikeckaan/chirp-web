@@ -1,0 +1,43 @@
+# Node
+node_modules/
+.npm/
+.yarn/
+*.log
+npm-debug.log*
+
+# Vite / build outputs
+web/dist/
+web/.vite/
+web/public/chirp-bundle/chirp_pkg.tar
+web/public/chirp-bundle/chirp_pkg.sha256
+web/public/pyodide/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+playwright-report/
+test-results/
+coverage/
+
+# Misc
+*.tsbuildinfo

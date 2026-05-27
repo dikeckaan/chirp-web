@@ -1,0 +1,3 @@
+[submodule "vendor/chirp"]
+	path = vendor/chirp
+	url = https://github.com/kk7ds/chirp.git

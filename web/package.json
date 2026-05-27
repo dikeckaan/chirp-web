@@ -1,0 +1,41 @@
+{
+  "name": "chirp-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browser-native CHIRP — Pyodide + WebSerial.",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "predev": "node scripts/copy-pyodide.js",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-pyodide.js",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "format": "prettier --write src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "copy-pyodide": "node scripts/copy-pyodide.js"
+  },
+  "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.26",
+    "dexie": "^4.0.10",
+    "pyodide": "^0.27.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.16.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8"
+  }
+}

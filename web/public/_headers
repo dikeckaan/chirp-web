@@ -1,0 +1,20 @@
+# Cloudflare Pages headers.
+# SharedArrayBuffer (used by the Pyodide worker for sync WebSerial I/O)
+# requires cross-origin isolation, which is gated behind these two
+# headers.
+
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# Large static assets — cache aggressively. The bundle filename is
+# content-addressed via SHA-256, but for now we cache-bust by hashing
+# `chirp_pkg.sha256` and appending it as a query string in the app.
+
+/chirp-bundle/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/pyodide/*
+  Cache-Control: public, max-age=31536000, immutable
