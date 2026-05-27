@@ -1,17 +1,18 @@
 // CHIRP-Web service worker.
 //
-// Strategy:
-//   - /pyodide/*  + /chirp-bundle/*  → cache-first (immutable assets)
-//   - HTML + JS / CSS                 → network-first (so deploys ship)
-//   - Everything else                 → network only
+// Two jobs:
+//   1. Cache Pyodide + the chirp bundle for fast / offline reloads.
+//   2. On hosts that don't natively send COOP/COEP (GitHub Pages),
+//      inject those headers so SharedArrayBuffer lights up. The
+//      first visit registers the SW, then we reload — pattern from
+//      `gzuidhof/coi-serviceworker`.
 //
 // Cache name bumps invalidate everything on the next visit.
 
-const CACHE = "chirp-web-v1";
+const CACHE = "chirp-web-v2";
 const PRECACHE_PATTERNS = ["/pyodide/", "/chirp-bundle/"];
 
-self.addEventListener("install", (event) => {
-  // Activate as soon as the new SW finishes installing.
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
@@ -42,8 +43,69 @@ self.addEventListener("fetch", (event) => {
     request.destination === "style"
   ) {
     event.respondWith(networkFirst(request));
+  } else {
+    // Pass-through, but still apply COI headers so embedded resources
+    // (worker.js, images, font, etc.) keep the page isolated.
+    event.respondWith(passthroughWithCoi(request));
   }
 });
+
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE);
+  const hit = await cache.match(req);
+  if (hit) return withCoi(hit);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(req, res.clone());
+    return withCoi(res);
+  } catch (e) {
+    if (hit) return withCoi(hit);
+    throw e;
+  }
+}
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(req, res.clone());
+    return withCoi(res);
+  } catch (e) {
+    const hit = await cache.match(req);
+    if (hit) return withCoi(hit);
+    throw e;
+  }
+}
+
+async function passthroughWithCoi(req) {
+  try {
+    const res = await fetch(req);
+    return withCoi(res);
+  } catch (e) {
+    return new Response(null, { status: 502, statusText: String(e) });
+  }
+}
+
+// Inject COOP/COEP headers when not already present. Mutates response
+// via clone — original body is reused. Opaque responses (cross-origin,
+// no CORS) can't have headers rewritten; passed through unchanged.
+function withCoi(response) {
+  if (response.type === "opaque" || response.type === "opaqueredirect") {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  if (!headers.has("Cross-Origin-Embedder-Policy")) {
+    headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  }
+  if (!headers.has("Cross-Origin-Opener-Policy")) {
+    headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 async function cacheFirst(req) {
   const cache = await caches.open(CACHE);

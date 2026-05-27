@@ -28,20 +28,20 @@ function post(msg: WorkerOutbound, transfer?: Transferable[]): void {
 
 // Pyodide is served from our own origin (see web/scripts/copy-pyodide.js)
 // to avoid COEP `require-corp` blocking and to make the app fully
-// offline-capable through the service worker.
-const PYODIDE_INDEX_URL = "/pyodide/";
+// offline-capable through the service worker. The exact path comes
+// from the main thread via the init message so we honor `base` (e.g.
+// `/chirp-web/` on GitHub Pages).
+let pyodideIndexUrl = "/pyodide/";
 
 interface PyodideModule {
   loadPyodide: (opts: { indexURL: string }) => Promise<unknown>;
 }
 
 async function loadPyodide(): Promise<any> {
-  // /* @vite-ignore */ stops Vite from trying to resolve the URL at
-  // bundle time — it's loaded from `/pyodide/` at runtime.
   const mod = (await import(
-    /* @vite-ignore */ `${PYODIDE_INDEX_URL}pyodide.mjs`
+    /* @vite-ignore */ `${pyodideIndexUrl}pyodide.mjs`
   )) as PyodideModule;
-  return await mod.loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+  return await mod.loadPyodide({ indexURL: pyodideIndexUrl });
 }
 
 async function fetchBundle(url: string): Promise<Uint8Array> {
@@ -57,8 +57,10 @@ async function fetchBundle(url: string): Promise<Uint8Array> {
 async function init(
   bundleUrl: string,
   bundleSha: string,
+  pyodideUrl: string,
   serialSab: SharedArrayBuffer,
 ): Promise<void> {
+  pyodideIndexUrl = pyodideUrl;
   // Expose the WebSerial sync proxy to Python BEFORE booting CHIRP —
   // the shim's `import serial` lookup happens during boot.startup().
   serialProxy = new WebSerialWorkerProxy(serialSab);
@@ -197,7 +199,7 @@ self.onmessage = async (ev: MessageEvent<WorkerInbound>) => {
   const msg = ev.data;
   try {
     if (msg.type === "init") {
-      await init(msg.bundleUrl, msg.bundleSha, msg.serialSab);
+      await init(msg.bundleUrl, msg.bundleSha, msg.pyodideIndexUrl, msg.serialSab);
     } else if (msg.type === "ping") {
       post({ type: "pong" });
     } else if (msg.type === "call") {

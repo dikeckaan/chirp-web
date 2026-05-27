@@ -6,7 +6,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Browser-native CHIRP — kurulumsuz radyo programlama. Pyodide + WebSerial." />
     <title>CHIRP-Web</title>
-    <link rel="preload" as="fetch" href="/chirp-bundle/chirp_pkg.tar" crossorigin="anonymous" />
+    <link rel="preload" as="fetch" href="chirp-bundle/chirp_pkg.tar" crossorigin="anonymous" />
+    <!--
+      COI bootstrap — when the page isn't already cross-origin isolated
+      (i.e. GitHub Pages, where we can't set headers server-side), the
+      service worker injects COOP/COEP into all responses. Worker
+      registration must happen as early as possible so the first reload
+      sees the headers; we do it from the inline script below.
+    -->
+    <script>
+      (function () {
+        if (!("serviceWorker" in navigator)) return;
+        if (window.crossOriginIsolated) return; // already good — nothing to do
+        navigator.serviceWorker.register("sw.js", { scope: "./" }).then(
+          function (reg) {
+            // If we just installed and there's no controller, reload to
+            // bring the page under the SW's scope (and pick up COOP/COEP).
+            if (!navigator.serviceWorker.controller) {
+              window.sessionStorage.setItem("chirp.coiReload", "1");
+              window.location.reload();
+            }
+          },
+          function (err) {
+            console.warn("coi sw register failed:", err);
+          },
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

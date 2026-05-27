@@ -27,8 +27,10 @@ export interface RuntimeCallbacks {
   onError: (message: string, stack?: string) => void;
 }
 
-const BUNDLE_URL = "/chirp-bundle/chirp_pkg.tar";
-const BUNDLE_SHA_URL = "/chirp-bundle/chirp_pkg.sha256";
+const BASE = import.meta.env.BASE_URL || "/";
+const BUNDLE_URL = BASE + "chirp-bundle/chirp_pkg.tar";
+const BUNDLE_SHA_URL = BASE + "chirp-bundle/chirp_pkg.sha256";
+const PYODIDE_INDEX_URL = BASE + "pyodide/";
 
 interface PendingCall {
   resolve: (v: unknown) => void;
@@ -124,6 +126,7 @@ export class ChirpRuntime {
     const initMsg: WorkerInbound = {
       type: "init",
       bundleUrl: BUNDLE_URL,
+      pyodideIndexUrl: PYODIDE_INDEX_URL,
       bundleSha,
       serialSab: this.serialSab!,
     };

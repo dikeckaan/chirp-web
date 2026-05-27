@@ -7,6 +7,7 @@ export type WorkerInbound =
   | {
       type: "init";
       bundleUrl: string;
+      pyodideIndexUrl: string;
       bundleSha: string;
       serialSab: SharedArrayBuffer;
     }
