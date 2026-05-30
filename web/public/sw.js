@@ -9,7 +9,7 @@
 //
 // Cache name bumps invalidate everything on the next visit.
 
-const CACHE = "chirp-web-v3";
+const CACHE = "chirp-web-v4";
 
 // Compute paths relative to the SW location so we work both at root
 // (Cloudflare Pages) and under `/chirp-web/` (GitHub Pages).
@@ -114,31 +114,4 @@ function withCoi(response) {
     statusText: response.statusText,
     headers,
   });
-}
-
-async function cacheFirst(req) {
-  const cache = await caches.open(CACHE);
-  const hit = await cache.match(req);
-  if (hit) return hit;
-  try {
-    const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (e) {
-    if (hit) return hit;
-    throw e;
-  }
-}
-
-async function networkFirst(req) {
-  const cache = await caches.open(CACHE);
-  try {
-    const res = await fetch(req);
-    if (res.ok) cache.put(req, res.clone());
-    return res;
-  } catch (e) {
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    throw e;
-  }
 }

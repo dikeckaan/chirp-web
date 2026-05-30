@@ -1,15 +1,21 @@
+import { useModalDismiss } from "../lib/useModalDismiss";
+
 interface Props {
   onClose: () => void;
 }
 
 export function AboutDialog({ onClose }: Props) {
+  const dialogRef = useModalDismiss(onClose);
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label="CHIRP-Web Hakkında"
         style={{ maxWidth: 560 }}
       >
         <h2 style={{ marginTop: 0 }}>CHIRP-Web Hakkında</h2>

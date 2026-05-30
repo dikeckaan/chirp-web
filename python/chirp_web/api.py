@@ -75,19 +75,24 @@ def list_drivers() -> list[dict[str, str]]:
 # --------------------------------------------------------------- image
 def open_image_bytes(data: bytes, filename: str = "radio.img") -> dict[str, Any]:
     """Open an image file. Auto-detects the radio model from CHIRP metadata."""
-    radio_cls = directory.get_radio_by_image(filename)
-    # `get_radio_by_image` writes a temp file and re-opens; in Pyodide we
-    # write to the in-memory FS at /tmp.
+    # `get_radio_by_image` needs the bytes on disk; in Pyodide we write to
+    # the in-memory FS at /tmp, detect, construct, then clean up — the
+    # radio loads the whole image into its mmap at construction.
     import os
     import tempfile
 
     fd, path = tempfile.mkstemp(suffix=".img")
     os.close(fd)
-    with open(path, "wb") as fp:
-        fp.write(bytes(data))
-
-    radio_cls = directory.get_radio_by_image(path)
-    radio = radio_cls(path)
+    try:
+        with open(path, "wb") as fp:
+            fp.write(bytes(data))
+        radio_cls = directory.get_radio_by_image(path)
+        radio = radio_cls(path)
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
     handle = _store(radio)
     return _describe(handle)
 
@@ -97,13 +102,20 @@ def save_image_bytes(handle: int) -> bytes:
     radio = _get(handle)
     if not isinstance(radio, chirp_common.FileBackedRadio):
         raise TypeError("This radio is not file-backed (live radio)")
+    import os
     import tempfile
 
-    with tempfile.NamedTemporaryFile(suffix=".img", delete=False) as tmp:
-        radio.save_mmap(tmp.name)
-        tmp.seek(0)
-        with open(tmp.name, "rb") as fp:
+    fd, path = tempfile.mkstemp(suffix=".img")
+    os.close(fd)
+    try:
+        radio.save_mmap(path)
+        with open(path, "rb") as fp:
             return fp.read()
+    finally:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def new_radio(driver_id: str) -> dict[str, Any]:
@@ -207,11 +219,13 @@ def get_settings_tree(handle: int) -> dict[str, Any]:
     return settings_to_tree(settings)
 
 
-def apply_settings(handle: int, tree: dict[str, Any]) -> None:
+def apply_settings(handle: int, tree: dict[str, Any]) -> list[str]:
+    """Apply a settings tree. Returns labels of settings that failed."""
     radio = _get(handle)
     current = radio.get_settings()
-    apply_settings_tree(current, tree)
+    failures = apply_settings_tree(current, tree)
     radio.set_settings(current)
+    return failures
 
 
 # ----------------------------------------------------------------- clone

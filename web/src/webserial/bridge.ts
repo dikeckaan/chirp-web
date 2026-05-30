@@ -31,6 +31,11 @@ import {
   type Opcode,
 } from "./shared-buffer";
 
+// Upper bound on buffered-but-undrained serial data per port. A healthy
+// clone drains continuously; this only trips if the Pyodide side stalls,
+// in which case we drop oldest chunks rather than grow memory unbounded.
+const MAX_RX_BYTES = 4 * 1024 * 1024;
+
 interface PortRecord {
   port: SerialPort;
   handle: number;
@@ -379,6 +384,16 @@ export class WebSerialBridge {
         if (value && value.byteLength) {
           rec.rx.push(value);
           rec.rxBytes += value.byteLength;
+          // Guardrail: if the Pyodide side stops draining, bound memory
+          // by discarding the oldest buffered chunks.
+          while (rec.rxBytes > MAX_RX_BYTES && rec.rx.length > 1) {
+            const dropped = rec.rx.shift()!;
+            rec.rxBytes -= dropped.byteLength;
+            if (DEBUG)
+              console.warn(
+                `[serial] rx buffer over ${MAX_RX_BYTES}B, dropped ${dropped.byteLength}B`,
+              );
+          }
           // Wake up anyone waiting on more data.
           const waiters = rec.rxWaiters.splice(0);
           for (const w of waiters) w();
@@ -398,11 +413,20 @@ export class WebSerialBridge {
     timeoutMs: number,
   ): Promise<Uint8Array> {
     const rec = this.requireOpen(handle);
-    const deadline = timeoutMs > 0 ? performance.now() + timeoutMs : Infinity;
-    while (rec.rxBytes < n) {
+    // A single response can carry at most RESP_PAYLOAD_BYTES. Clamp the
+    // request *before* draining so we never consume bytes we can't return
+    // — the pyserial caller loops for the remainder. (Was: clamp on the
+    // way out, after draining, which silently dropped the overflow.)
+    const want = Math.min(n, RESP_PAYLOAD_BYTES);
+    // Timeout encoding from the shim: <0 = block forever, 0 = non-blocking
+    // (drain whatever is buffered right now), >0 = wait that many ms.
+    const nonblocking = timeoutMs === 0;
+    const deadline =
+      timeoutMs > 0 ? performance.now() + timeoutMs : Infinity;
+    while (!nonblocking && rec.rxBytes < want) {
+      if (rec.closed) break;
       const remaining = deadline - performance.now();
       if (remaining <= 0) break;
-      if (rec.closed) break;
       // Park until the next chunk lands (or a max 25 ms fallback so we
       // also respect the deadline if the radio went quiet).
       await new Promise<void>((resolve) => {
@@ -416,7 +440,7 @@ export class WebSerialBridge {
         const t = setTimeout(wake, Math.min(remaining, 25));
       });
     }
-    const out = this.drainBytes(rec, n);
+    const out = this.drainBytes(rec, want);
     if (DEBUG)
       console.log(
         `[serial]   ← ${out.byteLength}/${n} bytes (timeout=${timeoutMs}ms)` +

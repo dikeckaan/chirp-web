@@ -53,3 +53,31 @@ class ChirpDB extends Dexie {
 }
 
 export const db = new ChirpDB();
+
+/** Friendly error for an exhausted storage quota. */
+export class StorageQuotaError extends Error {
+  constructor() {
+    super(
+      "Tarayıcı depolama alanı dolu — yer açmak için eski image " +
+        "veya modülleri silin.",
+    );
+    this.name = "StorageQuotaError";
+  }
+}
+
+function isQuotaError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  // Dexie surfaces the underlying DOMException name; also match the
+  // message defensively across browsers.
+  return e.name === "QuotaExceededError" || /quota/i.test(e.message);
+}
+
+/** Run an IndexedDB write, translating quota failures into a clear error. */
+export async function putWithQuota<T>(op: () => Promise<T>): Promise<T> {
+  try {
+    return await op();
+  } catch (e) {
+    if (isQuotaError(e)) throw new StorageQuotaError();
+    throw e;
+  }
+}

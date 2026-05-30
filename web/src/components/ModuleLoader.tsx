@@ -8,6 +8,7 @@ import {
   loadModuleBytes,
 } from "../storage/module-store";
 import type { StoredModule } from "../storage/indexeddb";
+import { errMsg } from "../lib/err";
 
 interface Props {
   onClose: () => void;
@@ -34,15 +35,23 @@ export function ModuleLoader({ onClose }: Props) {
 
   async function pickFile(file: File) {
     setError(null);
-    const buf = new Uint8Array(await file.arrayBuffer());
-    setBytes(buf);
-    setFilename(file.name);
-    const text = new TextDecoder().decode(buf);
-    // Cap preview at 64 KB for huge modules — f4hwn is ~136 KB.
-    setSource(text.length > 64 * 1024 ? text.slice(0, 64 * 1024) + "\n…(devamı kesildi)…" : text);
-    const hash = await sha256Hex(buf);
-    setSha(hash);
-    setAcknowledged(false);
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const text = new TextDecoder().decode(buf);
+      const hash = await sha256Hex(buf);
+      setBytes(buf);
+      setFilename(file.name);
+      // Cap preview at 64 KB for huge modules — f4hwn is ~136 KB.
+      setSource(
+        text.length > 64 * 1024
+          ? text.slice(0, 64 * 1024) + "\n…(devamı kesildi)…"
+          : text,
+      );
+      setSha(hash);
+      setAcknowledged(false);
+    } catch (e) {
+      setError(errMsg(e));
+    }
   }
 
   async function handleLoad(useBytes: Uint8Array, useFilename: string) {
@@ -69,7 +78,7 @@ export function ModuleLoader({ onClose }: Props) {
           result.newDrivers.map((d) => `• ${d.name}`).join("\n"),
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     } finally {
       setLoading(false);
     }
@@ -97,6 +106,7 @@ export function ModuleLoader({ onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label="Topluluk Modülü Yükle"
         style={{ maxWidth: 720 }}
       >
         <h2 style={{ marginTop: 0 }}>Topluluk Modülü Yükle</h2>
@@ -115,6 +125,7 @@ export function ModuleLoader({ onClose }: Props) {
         </p>
 
         <input
+          id="module-file-input"
           ref={fileInputRef}
           type="file"
           accept=".py,.mod,text/x-python"
@@ -127,12 +138,16 @@ export function ModuleLoader({ onClose }: Props) {
         />
 
         {!bytes && (
-          <button
+          // A <label> bound to the input opens the picker via native user
+          // activation — more reliable than a programmatic input.click(),
+          // which Chrome can silently drop.
+          <label
+            htmlFor="module-file-input"
             className="btn"
-            onClick={() => fileInputRef.current?.click()}
+            style={{ cursor: "pointer", display: "inline-block" }}
           >
             .py dosyası seç
-          </button>
+          </label>
         )}
 
         {bytes && (

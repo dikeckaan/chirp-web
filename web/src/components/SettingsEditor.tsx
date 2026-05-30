@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { runtime } from "../pyodide/instance";
 import type { SettingsTreeNode, SettingsValue } from "../pyodide/types";
+import { errMsg } from "../lib/err";
 
 interface Props {
   handle: number;
@@ -11,6 +12,7 @@ export function SettingsEditor({ handle }: Props) {
   const [activeTab, setActiveTab] = useState<string>("");
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
 
   useEffect(() => {
@@ -26,13 +28,24 @@ export function SettingsEditor({ handle }: Props) {
         const first = t.children?.[0];
         if (first) setActiveTab(first.name || first.shortname || "0");
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(errMsg(e));
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [handle]);
+
+  // Warn before leaving with unsaved settings changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   if (error) {
     return (
@@ -79,13 +92,20 @@ export function SettingsEditor({ handle }: Props) {
     if (!tree) return;
     setApplying(true);
     setError(null);
+    setWarning(null);
     try {
-      await runtime.applySettings(handle, tree);
+      const failed = await runtime.applySettings(handle, tree);
       const fresh = await runtime.getSettingsTree(handle);
       setTree(fresh);
       setDirty(false);
+      if (failed.length > 0) {
+        setWarning(
+          `${failed.length} ayar uygulanamadı: ${failed.slice(0, 8).join(", ")}` +
+            (failed.length > 8 ? " …" : ""),
+        );
+      }
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     } finally {
       setApplying(false);
     }
@@ -93,12 +113,13 @@ export function SettingsEditor({ handle }: Props) {
 
   async function handleRevert() {
     setApplying(true);
+    setWarning(null);
     try {
       const fresh = await runtime.getSettingsTree(handle);
       setTree(fresh);
       setDirty(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     } finally {
       setApplying(false);
     }
@@ -137,6 +158,22 @@ export function SettingsEditor({ handle }: Props) {
           {applying ? "Uygulanıyor…" : "Uygula"}
         </button>
       </div>
+
+      {warning && (
+        <div
+          role="alert"
+          style={{
+            margin: "0.5rem 1rem 0",
+            padding: "0.5rem 0.75rem",
+            borderRadius: "6px",
+            background: "var(--warn-bg, #5a4a00)",
+            color: "var(--warn-fg, #ffe9a8)",
+            fontSize: "0.85rem",
+          }}
+        >
+          ⚠ {warning}
+        </div>
+      )}
 
       <div className="settings-pane">
         {active ? (

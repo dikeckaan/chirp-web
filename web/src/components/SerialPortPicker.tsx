@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { runtime } from "../pyodide/instance";
+import { errMsg } from "../lib/err";
 
 export interface SerialPortInfo {
   handle: number;
@@ -25,7 +26,7 @@ export function SerialPortPicker({ value, onChange }: Props) {
         onChange(list[0].handle);
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -42,7 +43,7 @@ export function SerialPortPicker({ value, onChange }: Props) {
       refresh();
       onChange(handle);
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = errMsg(e);
       // User cancelled the picker — not an error.
       if (!/cancelled|no port selected/i.test(msg)) {
         setError(msg);

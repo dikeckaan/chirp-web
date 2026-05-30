@@ -22,6 +22,11 @@ from chirp import directory
 LOG = logging.getLogger("chirp_web.module_loader")
 LOADED_DIR = "/home/pyodide/loaded"
 
+# Driver ids each loaded module registered, keyed by modname. Lets
+# ``unload_module`` undo the registration in ``directory.DRV_TO_RADIO``
+# instead of leaving stale entries behind.
+_MODULE_DRIVERS: dict[str, list[str]] = {}
+
 
 def load_module(filename: str, source: bytes) -> dict[str, Any]:
     """Load a community driver module.
@@ -52,11 +57,25 @@ def load_module(filename: str, source: bytes) -> dict[str, Any]:
     module = importlib.util.module_from_spec(spec)
     module._was_loaded = True  # CHIRP convention
     sys.modules[modname] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        # A driver that throws during import must not leave a broken
+        # half-initialized entry in sys.modules — otherwise re-uploading
+        # the same file just re-imports the stub. Roll back so a fixed
+        # re-upload succeeds.
+        sys.modules.pop(modname, None)
+        try:
+            os.remove(fs_path)
+        except OSError:
+            pass
+        raise
 
     after = set(directory.DRV_TO_RADIO.keys())
+    registered_ids = sorted(after - before)
+    _MODULE_DRIVERS[modname] = list(registered_ids)
     new_drivers: list[dict[str, str]] = []
-    for drv_id in sorted(after - before):
+    for drv_id in registered_ids:
         cls = directory.DRV_TO_RADIO[drv_id]
         try:
             name = cls.get_name() if hasattr(cls, "get_name") else cls.MODEL
@@ -81,9 +100,19 @@ def load_module(filename: str, source: bytes) -> dict[str, Any]:
 
 
 def unload_module(modname: str) -> None:
-    """Best-effort removal — note CHIRP's directory keeps the registered
-    class even after the module is gone. Full cleanup would require
-    surgery on ``directory.DRV_TO_RADIO``; we defer that to a future
-    sprint and just drop ``sys.modules`` here so a fresh upload of the
-    same driver succeeds."""
+    """Remove a previously loaded module and the drivers it registered.
+
+    Drops the module from ``sys.modules`` (so a fresh upload re-imports
+    cleanly) and removes the driver ids it added from
+    ``directory.DRV_TO_RADIO`` so the driver list stays consistent.
+    """
     sys.modules.pop(modname, None)
+    for drv_id in _MODULE_DRIVERS.pop(modname, []):
+        directory.DRV_TO_RADIO.pop(drv_id, None)
+        # DRV_TO_RADIO is the registry the UI reads; some CHIRP versions
+        # also keep a reverse map, kept in sync best-effort.
+        radio_to_drv = getattr(directory, "RADIO_TO_DRV", None)
+        if isinstance(radio_to_drv, dict):
+            for cls, rid in list(radio_to_drv.items()):
+                if rid == drv_id:
+                    radio_to_drv.pop(cls, None)

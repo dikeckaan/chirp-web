@@ -69,11 +69,16 @@ export class ChirpRuntime {
     });
 
     // SAB must be created before the worker boots so the shim's
-    // `chirpWebSerial` proxy can latch onto it.
-    if (typeof SharedArrayBuffer === "undefined") {
+    // `chirpWebSerial` proxy can latch onto it. SharedArrayBuffer is only
+    // usable in a cross-origin-isolated context, so gate on
+    // `crossOriginIsolated` rather than the bare constructor (which can
+    // exist but be unusable). The one-time COI reload is owned by the
+    // bootstrap in index.html; by the time we get here, isolation is
+    // either established or genuinely unavailable.
+    if (!self.crossOriginIsolated || typeof SharedArrayBuffer === "undefined") {
       cb.onError(
         "SharedArrayBuffer kullanılamıyor — sayfa cross-origin isolated değil. " +
-          "(COOP/COEP header'larını kontrol et.)",
+          "Tarayıcıyı yenileyin; sorun sürerse COOP/COEP header'larını kontrol edin.",
       );
       return;
     }
@@ -112,7 +117,12 @@ export class ChirpRuntime {
     };
 
     this.worker.onerror = (ev) => {
-      cb.onError(ev.message ?? "Worker error", ev.error?.stack);
+      const message = ev.message ?? "Worker error";
+      // A worker crash strands every in-flight RPC — reject them all so
+      // callers (clone, open, etc.) surface the error instead of hanging.
+      this.ready = false;
+      this.rejectAllPending(new Error(message));
+      cb.onError(message, ev.error?.stack);
     };
 
     let bundleSha = "unknown";
@@ -137,14 +147,20 @@ export class ChirpRuntime {
     this.worker?.terminate();
     this.worker = null;
     this.ready = false;
-    for (const [, p] of this.pending) {
-      p.reject(new Error("Runtime disposed"));
-    }
-    this.pending.clear();
-    this.callbacks.clear();
+    this.rejectAllPending(new Error("Runtime disposed"));
     this.serialBridge?.dispose();
     this.serialBridge = null;
     this.serialSab = null;
+  }
+
+  /** Reject and clear every in-flight RPC promise (and its callbacks).
+   *  Used on dispose and on an unexpected worker crash. */
+  private rejectAllPending(err: Error): void {
+    for (const [, p] of this.pending) {
+      p.reject(err);
+    }
+    this.pending.clear();
+    this.callbacks.clear();
   }
 
   /** Terminate worker + serial bridge and bring up a fresh runtime.
@@ -264,7 +280,8 @@ export class ChirpRuntime {
     return this.call("get_settings_tree", handle);
   }
 
-  applySettings(handle: number, tree: SettingsTreeNode): Promise<void> {
+  /** Returns labels of any settings that could not be applied. */
+  applySettings(handle: number, tree: SettingsTreeNode): Promise<string[]> {
     return this.call("apply_settings", handle, tree);
   }
 

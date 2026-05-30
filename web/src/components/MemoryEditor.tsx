@@ -10,6 +10,7 @@ import { runtime } from "../pyodide/instance";
 import { useAppStore } from "../state/store";
 import type { OpenRadio } from "../state/store";
 import type { MemoryDict } from "../pyodide/types";
+import { errMsg } from "../lib/err";
 
 interface Props {
   radio: OpenRadio;
@@ -40,10 +41,16 @@ export function MemoryEditor({ radio }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function commit(updated: MemoryDict) {
-    const errs = await runtime.setMemory(radio.info.handle, updated);
-    setValidationErrors(updated.number, errs);
-    if (errs.length === 0) {
-      updateMemory(updated);
+    try {
+      const errs = await runtime.setMemory(radio.info.handle, updated);
+      setValidationErrors(updated.number, errs);
+      if (errs.length === 0) {
+        updateMemory(updated);
+      }
+    } catch (e) {
+      // RPC-level failure (worker crash, etc.) — treat as a validation
+      // error on this row so the user sees it instead of a silent no-op.
+      setValidationErrors(updated.number, [errMsg(e)]);
     }
   }
 
@@ -133,8 +140,37 @@ export function MemoryEditor({ radio }: Props) {
             )}
           </tbody>
         </table>
-        {/* validation errors footer */}
       </div>
+      <ValidationFooter errors={validationErrors} />
+    </div>
+  );
+}
+
+function ValidationFooter({
+  errors,
+}: {
+  errors: Record<number, string[]>;
+}) {
+  const rows = Object.entries(errors).filter(([, msgs]) => msgs.length > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        borderTop: "1px solid var(--danger, #b00)",
+        background: "var(--danger-bg, #3a0d0d)",
+        color: "var(--danger-fg, #ffd4d4)",
+        padding: "0.5rem 0.75rem",
+        fontSize: "0.82rem",
+        maxHeight: "8rem",
+        overflowY: "auto",
+      }}
+    >
+      {rows.map(([num, msgs]) => (
+        <div key={num}>
+          <strong>#{num}:</strong> {msgs.join("; ")}
+        </div>
+      ))}
     </div>
   );
 }

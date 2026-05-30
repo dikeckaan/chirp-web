@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { runtime } from "../pyodide/instance";
 import { useAppStore } from "../state/store";
 import { saveImage } from "../storage/image-store";
 import { MemoryEditor } from "./MemoryEditor";
 import { SettingsEditor } from "./SettingsEditor";
 import { CloneDialog } from "./CloneDialog";
+import { errMsg } from "../lib/err";
 
 type WorkspaceTab = "memory" | "settings";
 
@@ -17,6 +18,18 @@ export function RadioWorkspace() {
   const [showUpload, setShowUpload] = useState(false);
   const drivers = useAppStore((s) => s.drivers);
   const csvInputRef = useRef<HTMLInputElement>(null);
+
+  // Warn before leaving the page with unsaved channel/image edits.
+  const isDirty = open?.dirty ?? false;
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
 
   if (!open) return null;
 
@@ -44,7 +57,7 @@ export function RadioWorkspace() {
         dirty: false,
       });
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -65,7 +78,7 @@ export function RadioWorkspace() {
       URL.revokeObjectURL(url);
       setDirty(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -83,7 +96,7 @@ export function RadioWorkspace() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -110,11 +123,15 @@ export function RadioWorkspace() {
         `İçeri alındı: ${result.imported} kanal\n` +
         (result.skipped ? `Atlandı: ${result.skipped} kanal\n` : "") +
         (result.warnings.length
-          ? "\nUyarılar:\n" + result.warnings.slice(0, 10).join("\n")
+          ? "\nUyarılar:\n" +
+            result.warnings.slice(0, 10).join("\n") +
+            (result.warnings.length > 10
+              ? `\n… ve ${result.warnings.length - 10} uyarı daha`
+              : "")
           : "");
       alert(summary);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -172,6 +189,7 @@ export function RadioWorkspace() {
 
         <span className="spacer" />
         <input
+          id="csv-import-input"
           ref={csvInputRef}
           type="file"
           accept=".csv,text/csv"
@@ -182,13 +200,14 @@ export function RadioWorkspace() {
             if (csvInputRef.current) csvInputRef.current.value = "";
           }}
         />
-        <button
+        <label
+          htmlFor="csv-import-input"
           className="btn secondary"
-          onClick={() => csvInputRef.current?.click()}
+          style={{ cursor: "pointer", display: "inline-block" }}
           title="CSV dosyasından kanal listesi içeri al"
         >
           CSV İçe Al
-        </button>
+        </label>
         <button
           className="btn secondary"
           onClick={handleExportCsv}

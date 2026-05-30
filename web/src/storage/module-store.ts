@@ -1,4 +1,4 @@
-import { db, StoredModule } from "./indexeddb";
+import { db, StoredModule, putWithQuota } from "./indexeddb";
 
 export async function saveModule(
   filename: string,
@@ -13,7 +13,7 @@ export async function saveModule(
     loadedAt: Date.now(),
     newDrivers,
   };
-  await db.modules.put(record);
+  await putWithQuota(() => db.modules.put(record));
   return record;
 }
 

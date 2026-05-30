@@ -154,32 +154,51 @@ def _encode_value(v) -> dict[str, Any]:
     }
 
 
-def apply_settings_tree(node, tree: dict[str, Any]) -> None:
-    """Inverse of :func:`settings_to_tree` — mutates `node` in place."""
+def apply_settings_tree(
+    node, tree: dict[str, Any], _failures: list[str] | None = None
+) -> list[str]:
+    """Inverse of :func:`settings_to_tree` — mutates `node` in place.
+
+    Returns the human-readable labels of any settings that could not be
+    applied (missing in the radio tree, or rejected by CHIRP validation)
+    so the caller can tell the user instead of silently dropping them.
+    """
+    failures: list[str] = [] if _failures is None else _failures
+
     if tree.get("type") == "group":
         # Walk children by name. CHIRP groups support __getitem__ by name.
         for child_tree in tree.get("children", []):
-            try:
-                child_node = node[child_tree["name"]]
-            except (KeyError, IndexError):
+            name = child_tree.get("name")
+            if name is None:
                 continue
-            apply_settings_tree(child_node, child_tree)
-        return
+            try:
+                child_node = node[name]
+            except (KeyError, IndexError, TypeError):
+                failures.append(str(name))
+                continue
+            apply_settings_tree(child_node, child_tree, failures)
+        return failures
 
     if tree.get("type") == "setting":
         # `node` here is a RadioSetting — set each value
         values = list(node)
+        label = tree.get("shortname") or tree.get("name") or "(setting)"
         for i, val_tree in enumerate(tree.get("values", [])):
             if i >= len(values):
+                failures.append(f"{label} (fazladan değer atlandı)")
                 break
-            _apply_value(values[i], val_tree)
+            if not _apply_value(values[i], val_tree):
+                failures.append(str(label))
+
+    return failures
 
 
-def _apply_value(rsv, val_tree: dict[str, Any]) -> None:
+def _apply_value(rsv, val_tree: dict[str, Any]) -> bool:
+    """Apply one value; return False if CHIRP rejected it."""
     kind = val_tree.get("kind")
     new_value = val_tree.get("value")
     if new_value is None:
-        return
+        return True
     try:
         if kind == "boolean":
             rsv.set_value(bool(new_value))
@@ -189,5 +208,9 @@ def _apply_value(rsv, val_tree: dict[str, Any]) -> None:
             rsv.set_value(float(new_value))
         else:
             rsv.set_value(new_value)
-    except Exception:  # noqa: BLE001 — CHIRP validation may reject; surface upstream
-        pass
+        return True
+    except Exception as e:  # noqa: BLE001 — CHIRP validation may reject
+        import logging
+        logging.getLogger("chirp_web.settings_codec").warning(
+            "Setting value rejected (%s): %s", kind, e)
+        return False

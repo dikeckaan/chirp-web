@@ -76,10 +76,25 @@ export class WebSerialWorkerProxy {
     Atomics.store(this.header, STATE_IDX, STATE_CMD);
     Atomics.notify(this.header, STATE_IDX);
 
-    // Block until the main thread sets STATE_RESP. No timeout — we
-    // already passed any per-op timeout via int2.
+    // Block until the main thread sets STATE_RESP. A generous watchdog
+    // bounds the wait so a dead/crashed bridge can't freeze the worker
+    // forever, while never tripping on a legitimately slow op (the bridge
+    // mirrors the radio for READ; everything else is local and fast).
+    const deadline = performance.now() + watchdogBudgetMs(opcode, int2);
     while (Atomics.load(this.header, STATE_IDX) === STATE_CMD) {
-      Atomics.wait(this.header, STATE_IDX, STATE_CMD);
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) {
+        // Reset to IDLE so a subsequent op isn't wedged, then surface the
+        // failure to Python as a serial error instead of hanging.
+        this.finish();
+        throw new Error("Seri köprü yanıt vermedi (watchdog zaman aşımı)");
+      }
+      Atomics.wait(
+        this.header,
+        STATE_IDX,
+        STATE_CMD,
+        Math.min(remaining, 1000),
+      );
     }
   }
 
@@ -202,6 +217,21 @@ export class WebSerialWorkerProxy {
       return [];
     }
   }
+}
+
+// How long the worker will block on a single op before declaring the
+// main-thread bridge dead. Sized to never trip a legitimate op:
+//   READ infinite (timeout=None, int2<0) → long backstop only
+//   READ non-blocking (int2===0)         → must be near-instant
+//   READ with timeout (int2>0)           → that timeout + margin
+//   everything else                      → local, must be quick
+export function watchdogBudgetMs(opcode: number, int2: number): number {
+  if (opcode === OPCODES.READ) {
+    if (int2 < 0) return 300_000;
+    if (int2 === 0) return 10_000;
+    return int2 + 10_000;
+  }
+  return 30_000;
 }
 
 function decodeShared(buf: Uint8Array, len: number): string {

@@ -4,6 +4,8 @@ import { useAppStore } from "../state/store";
 import { saveImage } from "../storage/image-store";
 import type { DriverInfo } from "../pyodide/types";
 import { SerialPortPicker } from "./SerialPortPicker";
+import { errMsg } from "../lib/err";
+import { useModalDismiss } from "../lib/useModalDismiss";
 
 interface Props {
   mode: "download" | "upload";
@@ -30,6 +32,9 @@ export function CloneDialog({ mode, drivers, onClose }: Props) {
     msg: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useModalDismiss(() => {
+    if (!running) onClose();
+  });
 
   async function run() {
     if (portHandle === null) {
@@ -84,7 +89,7 @@ export function CloneDialog({ mode, drivers, onClose }: Props) {
         onClose();
       }
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     } finally {
       setRunning(false);
     }
@@ -93,10 +98,13 @@ export function CloneDialog({ mode, drivers, onClose }: Props) {
   return (
     <div className="modal-backdrop" onClick={() => !running && onClose()}>
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         className="modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
+        aria-label={mode === "download" ? "Radyodan İndir" : "Radyoya Yükle"}
       >
         <h2 style={{ marginTop: 0 }}>
           {mode === "download"

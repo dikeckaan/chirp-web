@@ -44,6 +44,23 @@ _PARITY_MAP = {
     PARITY_ODD: "odd",
 }
 
+# Sentinel the bridge understands for "block forever". pyserial timeout
+# semantics: ``None`` blocks indefinitely, ``0`` is non-blocking (return
+# immediately with whatever is buffered), ``>0`` waits that many seconds.
+_TIMEOUT_INFINITE_MS = -1
+
+
+def _timeout_to_ms(timeout):
+    """Map a pyserial timeout to the bridge's millisecond encoding.
+
+    ``None`` → -1 (infinite), ``0`` → 0 (non-blocking), ``>0`` → ms.
+    """
+    if timeout is None:
+        return _TIMEOUT_INFINITE_MS
+    if timeout <= 0:
+        return 0
+    return int(timeout * 1000)
+
 
 def _bridge():
     if not _IN_PYODIDE or not hasattr(js, "chirpWebSerial"):
@@ -211,7 +228,7 @@ class Serial:
     def read(self, size=1):
         if self._handle is None:
             raise SerialException("Port not open")
-        timeout_ms = int((self._timeout or 0) * 1000)
+        timeout_ms = _timeout_to_ms(self._timeout)
         try:
             buf = _bridge().readSync(self._handle, size, timeout_ms)
         except Exception as exc:  # noqa: BLE001

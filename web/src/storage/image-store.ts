@@ -1,4 +1,4 @@
-import { db, StoredImage } from "./indexeddb";
+import { db, StoredImage, putWithQuota } from "./indexeddb";
 
 function uuid(): string {
   // crypto.randomUUID is available in all modern Chromium-based browsers
@@ -35,7 +35,7 @@ export async function saveImage(input: SaveImageInput): Promise<StoredImage> {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
-  await db.images.put(record);
+  await putWithQuota(() => db.images.put(record));
   return record;
 }
 

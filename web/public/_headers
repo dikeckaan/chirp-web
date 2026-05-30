@@ -8,6 +8,11 @@
   Cross-Origin-Embedder-Policy: require-corp
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+  # Pyodide runs under CSP with 'wasm-unsafe-eval' (WASM compilation, no
+  # JS eval). 'unsafe-inline' is required for the inline COI bootstrap in
+  # index.html. worker-src allows the Pyodide web worker (blob: for the
+  # Vite dev/prod worker URL). Tighten script-src to hashes/nonces later.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
 
 # Large static assets — cache aggressively. The bundle filename is
 # content-addressed via SHA-256, but for now we cache-bust by hashing

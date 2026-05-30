@@ -6,6 +6,7 @@ import type { StoredImage } from "../storage/indexeddb";
 import type { DriverInfo } from "../pyodide/types";
 import { CloneDialog } from "./CloneDialog";
 import { ModuleLoader } from "./ModuleLoader";
+import { errMsg } from "../lib/err";
 
 export function WelcomeView() {
   const drivers = useAppStore((s) => s.drivers);
@@ -28,7 +29,7 @@ export function WelcomeView() {
         if (cancelled) return;
         setRecents(recent);
       } catch (e) {
-        if (!cancelled) setError((e as Error).message);
+        if (!cancelled) setError(errMsg(e));
       }
     })();
     return () => {
@@ -63,7 +64,7 @@ export function WelcomeView() {
       });
       setRecents(await listRecentImages());
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -84,7 +85,7 @@ export function WelcomeView() {
         validationErrors: {},
       });
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -110,7 +111,7 @@ export function WelcomeView() {
         validationErrors: {},
       });
     } catch (e) {
-      setError((e as Error).message);
+      setError(errMsg(e));
     }
   }
 
@@ -192,6 +193,7 @@ function OpenImageCard({
         içeriği otomatik tanır.
       </p>
       <input
+        id="welcome-img-input"
         ref={fileInputRef}
         type="file"
         accept=".img,.dat,.bin"
@@ -202,9 +204,13 @@ function OpenImageCard({
           if (fileInputRef.current) fileInputRef.current.value = "";
         }}
       />
-      <button className="btn" onClick={() => fileInputRef.current?.click()}>
+      <label
+        htmlFor="welcome-img-input"
+        className="btn"
+        style={{ cursor: "pointer", display: "inline-block" }}
+      >
         Dosya seç
-      </button>
+      </label>
     </div>
   );
 }
